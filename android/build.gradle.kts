@@ -15,10 +15,19 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
+
 subprojects {
     project.evaluationDependsOn(":app")
 }
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
+}
+
+subprojects {
+    extensions.findByName("android")?.let { ext ->
+        val androidExt = ext as com.android.build.gradle.BaseExtension
+        androidExt.compileOptions.sourceCompatibility = JavaVersion.VERSION_17
+        androidExt.compileOptions.targetCompatibility = JavaVersion.VERSION_17
+    }
 }
