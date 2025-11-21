@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart'; //tambahkan import geocoding langkah 2
+import 'package:geocoding/geocoding.dart';
 
 void main() {
   runApp(MyApp());
@@ -28,12 +28,42 @@ class _MyHomePageState extends State<MyHomePage> {
   Position? _currentPosition;
   String? _errorMessage;
   StreamSubscription<Position>? _positionStream;
-  String? _currentAddres; //tambah variabel untuk menyimpan alamat saat ini (langkah 3)
+  String? _currentAddress;
+  String? distanceToPNB;
+
+  // titik tetap PNB
+  final double _pnbLatitude = -6.176333;
+  final double _pnbLongitude = 106.696969;
 
   @override
   void dispose() {
     _positionStream?.cancel();
     super.dispose();
+  }
+
+  String _formatDistance(double meters) {
+    if (meters < 1000) {
+      return '${meters.toStringAsFixed(0)} m';
+    } else {
+      double km = meters / 1000;
+      return '${km.toStringAsFixed(2)} Km';
+    }
+  }
+
+  double _calculateDistance(Position pos) {
+    return Geolocator.distanceBetween(
+      _pnbLatitude,
+      _pnbLongitude,
+      pos.latitude, // ’position ’ dari stream
+      pos.longitude,
+    );
+  }
+
+  Future<String> _getAddressFromLatLng(Position position) async {
+    List<Placemark> alamat = await placemarkFromCoordinates(position.latitude, position.longitude);
+    Placemark tempat = alamat[0];
+    String formattedAddress = "${tempat.street} ,${tempat.subLocality}, ${tempat.locality}, ${tempat.country}";
+    return formattedAddress;
   }
 
   Future<Position> _getPermissionAndLocation() async {
@@ -74,11 +104,15 @@ class _MyHomePageState extends State<MyHomePage> {
   void _handleGetLocation() async {
     try {
       Position position = await _getPermissionAndLocation();
+      String getAddress = await _getAddressFromLatLng(position);
+      double distanceInMeters = _calculateDistance(position);
+
       setState(() {
         _currentPosition = position;
+        _currentAddress = getAddress;
         _errorMessage = null;
+        distanceToPNB = _formatDistance(distanceInMeters);
       });
-      _getAddressFromLatLng(position); // panggil geocoding  setelah mendapatkan posisi (langkah 5a)
     } catch (e) {
       setState(() {
         _errorMessage = e.toString();
@@ -92,20 +126,17 @@ class _MyHomePageState extends State<MyHomePage> {
     final LocationSettings locationSettings = LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10);
 
     try {
-      _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
-        (Position position) {
-          setState(() {
-            _currentPosition = position;
-            _errorMessage = null;
-          });
-          _getAddressFromLatLng(position); // memanggil geocoding di stream (langkah 5b)
-        },
-        onError: (e) {
-          setState(() {
-            _errorMessage = e.toString();
-          });
-        },
-      );
+      _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen((Position position) async {
+        String getAddress = await _getAddressFromLatLng(position);
+        double distanceInMeters = _calculateDistance(position);
+
+        setState(() {
+          _currentPosition = position;
+          _currentAddress = getAddress;
+          _errorMessage = null;
+          distanceToPNB = _formatDistance(distanceInMeters);
+        });
+      });
     } catch (e) {
       setState(() {
         _errorMessage = e.toString();
@@ -118,22 +149,6 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       _errorMessage = "Pelacakan dihentikan.";
     });
-  }
-
-  // membuat fungsi baru untuk geocoding (langkah 4)
-  Future<void> _getAddressFromLatLng(Position position) async {
-    try {
-      List<Placemark> Placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
-
-      Placemark place = Placemarks[0];
-      setState(() {
-        _currentAddres = "${place.street}, ${place.subLocality}, ${place.locality}, ${place.postalCode}, ${place.country}";
-      });
-    } catch (e) {
-      setState(() {
-        _currentAddres = "Tidak dapat mengembil alamat: ${e.toString()}";
-      });
-    }
   }
 
   @override
@@ -171,12 +186,23 @@ class _MyHomePageState extends State<MyHomePage> {
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       SizedBox(height: 8),
-                      //Untuk menampilkan alamat (geocoding) (langkah 6)
-                      if (_currentAddres != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text("Alamat:\n$_currentAddres", textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
-                        ),
+                      if (_currentAddress != null) Text(_currentAddress!, textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
+                      SizedBox(height: 16),
+
+                      Column(
+                        children: [
+                          Text(
+                            "Jarak ke PNB:",
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue),
+                          ),
+                          SizedBox(height: 6),
+
+                          Text(
+                            distanceToPNB ?? "-",
+                            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.black),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
